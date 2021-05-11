@@ -15,6 +15,7 @@ import json
 import numpy as np
 
 
+
 # load the credential data from yaml file
 def process_yaml(credentials):
     with open(credentials) as c:
@@ -79,19 +80,28 @@ def main():
     access_data = process_yaml("credentials.yaml")
     consumer_key, consumer_secret = create_keys(access_data)
     api = twitter_auth(consumer_key, consumer_secret)
-    tweets = twitter_search(api, '#')
+    tweets = twitter_search(api, '#nfl')
+
+    pd.set_option('display.max_rows', None)
+    pd.set_option('display.max_columns', None)
+    pd.set_option('display.width', None)
+    pd.set_option('display.max_colwidth', 50)
+    print(type(tweets))
     df = pd.DataFrame([tweet.full_text for tweet in tweets], columns=['Tweets'])
+    df['Screen_Name'] = np.array([tweet.user.screen_name for tweet in tweets])
+
     df['Tweets'] = df['Tweets'].apply(cleanTxt)
-    df['Subjectivity'] = df['Tweets'].apply(getSubjectivity)
+
+    #df['Subjectivity'] = df['Tweets'].apply(getSubjectivity)
     df['Polarity'] = df['Tweets'].apply(getPolarity)
     df['Analysis'] = df['Polarity'].apply(getAnalysis)
-
+    print(df)
     #df = np.array([tweet.full_text for tweet in tweets], columns=['Tweets'])
     df['Screen_Name'] = np.array([tweet.user.screen_name for tweet in tweets])
     df['Screen_Name'] = np.array([tweet.user.screen_name for tweet in tweets])
-    print(df['Screen_Name'].value_counts())
+    #print(df['Screen_Name'].value_counts())
     df = df.sort_values(by=['Screen_Name'])
-    print(df)
+    #print(df)
     #test(api, tweets)
 
 
