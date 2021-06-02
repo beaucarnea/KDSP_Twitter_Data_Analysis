@@ -13,8 +13,7 @@ import re
 from textblob import TextBlob
 import json
 import numpy as np
-
-
+from tweepy import TweepError
 
 # load the credential data from yaml file
 def process_yaml(credentials):
@@ -30,7 +29,7 @@ def create_keys(access_data):
 # get access to the Twitter API
 def twitter_auth(consumer_key, consumer_secret):
     auth = tweepy.AppAuthHandler(consumer_key, consumer_secret)
-    api = tweepy.API(auth)
+    api = tweepy.API(auth, wait_on_rate_limit=True)
     return api
 
 
@@ -44,7 +43,7 @@ def twitter_search(api, search):
 def cleanTxt(text):
     text = re.sub(r'@[A-Za-z0-9]+', '', text)  # Remove @mentions
     text = re.sub(r'#', '', text)  # Remonving the '#' symbol
-    text = re.sub(r'RT[\s]\+', '', text)  # Removing RT TODO: RT's are not removed
+    text = re.sub(r'RT[\s]: ', '', text)  # Removing RT
     text = re.sub(r'https?:\/\/\S+', '', text)  # Remove the hyper link
 
     return text
@@ -68,6 +67,38 @@ def getAnalysis(score):
     else:
         return 'Positive'
 
+def getHashtags(tweets, event):
+    hashtags = []
+    for tweet in tweets:
+        for word in tweet.lower().split(' '):
+            if word.startswith('#'):
+                word = re.search('#[a-z0-9]*', word)
+                word = word.group(0)
+                if word != event.lower():
+                    hashtags.append(word)
+    return hashtags;
+
+def twitterFollower(api, user, count):
+    followers = tweepy.Cursor(api.followers, user).items(count)
+    print(followers.next())
+    return followers
+
+def getFollowersProfiles(api, followers, count):
+    profiles = []
+    for follower in followers:
+        try:
+            line = tweepy.Cursor(api.user_timeline, follower).items(count)
+            print("--------------" + str(line.next().user))
+            for tweet in line:
+                print(tweet.text)
+        except TweepError:
+            print("Not allowed to access profile!")
+        except StopIteration:
+            pass
+
+#def convertProfileData(followers, count):
+
+
 # test function
 def test(api, data):
     screen_name = 'de'
@@ -77,31 +108,46 @@ def test(api, data):
         i = i + 1;
 
 def main():
+    event = '#DUUUVAL'
     access_data = process_yaml("credentials.yaml")
     consumer_key, consumer_secret = create_keys(access_data)
     api = twitter_auth(consumer_key, consumer_secret)
-    tweets = twitter_search(api, '#nfl')
+    tweets = twitter_search(api, event)
 
-    pd.set_option('display.max_rows', None)
+    #format output of pandas DataFrame
+    #pd.set_option('display.max_rows', None)
     pd.set_option('display.max_columns', None)
     pd.set_option('display.width', None)
-    pd.set_option('display.max_colwidth', 50)
+    #pd.set_option('display.max_colwidth', 50)
     print(type(tweets))
-    df = pd.DataFrame([tweet.full_text for tweet in tweets], columns=['Tweets'])
-    df['Screen_Name'] = np.array([tweet.user.screen_name for tweet in tweets])
 
-    df['Tweets'] = df['Tweets'].apply(cleanTxt)
+    df_tweets = pd.DataFrame([tweet.full_text for tweet in tweets], columns=['Tweets'])
+    df_tweets['Screen_Name'] = np.array([tweet.user.screen_name for tweet in tweets])
+
+    df_tweets['Tweets_Sentiment'] = df_tweets['Tweets'].apply(cleanTxt)
 
     #df['Subjectivity'] = df['Tweets'].apply(getSubjectivity)
-    df['Polarity'] = df['Tweets'].apply(getPolarity)
-    df['Analysis'] = df['Polarity'].apply(getAnalysis)
-    print(df)
-    #df = np.array([tweet.full_text for tweet in tweets], columns=['Tweets'])
-    df['Screen_Name'] = np.array([tweet.user.screen_name for tweet in tweets])
-    df['Screen_Name'] = np.array([tweet.user.screen_name for tweet in tweets])
-    #print(df['Screen_Name'].value_counts())
-    df = df.sort_values(by=['Screen_Name'])
-    #print(df)
+    df_tweets['Polarity'] = df_tweets['Tweets_Sentiment'].apply(getPolarity)
+    df_tweets['Analysis'] = df_tweets['Polarity'].apply(getAnalysis)
+
+    print(df_tweets)
+
+    print(df_tweets['Screen_Name'].value_counts().nlargest(10))
+
+    df_hashtags = pd.DataFrame(getHashtags(df_tweets['Tweets'], event), columns=['Hashtags'])
+
+    print(df_hashtags['Hashtags'].value_counts().nlargest(10))
+    count = 11
+    followers = twitterFollower(api, 'Jaguars', count)
+    df_follower = pd.DataFrame([follower.screen_name for follower in followers], columns=['Follower'])
+    print(df_follower)
+
+    followers_Profiles = getFollowersProfiles(api, df_follower['Follower'], count)
+
+    df_follower['location'] = np.array([profile.user.follower for profile in followers_Profiles])
+
+
+
     #test(api, tweets)
 
 
